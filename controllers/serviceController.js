@@ -15,11 +15,6 @@ exports.assignService = async (req, res) => {
         let vehicle = await Vehicle.findOne({ licensePlate });
 
         if (!vehicle) {
-            // If vehicle not found, create a new one.
-            // For simplicity, we're assuming any new vehicle added via admin form
-            // is owned by the admin in the 'Vehicle' schema.
-            // A more robust system would involve the admin selecting an existing user
-            // or creating a new user to associate with the vehicle.
             console.warn(`Vehicle with license plate ${licensePlate} not found. Creating a new vehicle owned by admin ${adminId}.`);
             vehicle = new Vehicle({
                 make,
@@ -30,17 +25,23 @@ exports.assignService = async (req, res) => {
             await vehicle.save();
         }
 
+        // Determine the user associated with this service.
+        // Prefer the vehicle's owner if available. If the vehicle was found but its
+        // 'owner' field is missing or null (due to data inconsistencies from previous states),
+        // we will fall back to using the adminId for this service record.
+        // This ensures the `user` field in Service always receives a valid ObjectId.
+        const serviceUser = (vehicle.owner && vehicle.owner.toString()) ? vehicle.owner : adminId;
+
         // --- 2. Create Service Entry ---
         const newService = new Service({
             vehicleId: vehicle._id, // Link to the found or newly created vehicle
-            user: vehicle.owner, // The actual owner of the vehicle (from Vehicle schema)
-                                 // This links the service to the end user for their dashboard
+            user: serviceUser,       // Using the determined user ID for the service record
             type, // This field acts as the status (e.g., "Pending", "In Progress")
             description,
             cost,
             date: new Date(), // Service date is now
-            customerName,    // <--- ADDED: Save customerName
-            customerPhone    // <--- ADDED: Save customerPhone
+            customerName,    // Save customerName to Service document
+            customerPhone    // Save customerPhone to Service document
         });
 
         await newService.save();
@@ -49,6 +50,11 @@ exports.assignService = async (req, res) => {
 
     } catch (err) {
         console.error("Error assigning service:", err.message);
+        // More specific error handling for Mongoose validation errors
+        if (err.name === 'ValidationError') {
+            const messages = Object.values(err.errors).map(val => val.message);
+            return res.status(400).json({ msg: `Validation failed: ${messages.join(', ')}` });
+        }
         res.status(500).send('Server Error while assigning service.');
     }
 };
@@ -90,6 +96,7 @@ exports.fetchServices = async (req, res) => {
         // req.user.isAdmin is populated by auth middleware (which ensures admin access)
         if (req.user.isAdmin) {
             // If admin, fetch all services, and populate both vehicle and user details
+            // The 'user' field in Service refers to the owner of the vehicle, which is a User ID.
             services = await Service.find()
                 .populate('vehicleId') // Populate vehicle details
                 .populate('user'); // Populate user (owner) details
