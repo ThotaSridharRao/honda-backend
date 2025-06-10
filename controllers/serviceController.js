@@ -3,45 +3,69 @@ const Vehicle = require('../models/vehicle'); // Import Vehicle model
 const User = require('../models/user'); // Import User model for customer name/phone (if needed)
 
 // @route   POST api/services
-// @desc    Assign a new service to a vehicle (admin action)
-// @access  Private (Admin only)
+// @desc    Assign a new service to a vehicle (admin action) OR allow user to book a service
+// @access  Private (requires authentication)
 exports.assignService = async (req, res) => {
-    // Expected fields from admin form: make, model, licensePlate, customerName, customerPhone, type, description, cost
-    const { make, model, licensePlate, customerName, customerPhone, type, description, cost } = req.body;
-    const adminId = req.user.id; // Get the ID of the admin assigning the service
+    // Fields potentially from admin form: make, model, licensePlate, customerName, customerPhone
+    // Fields potentially from user booking form: vehicleId, date, type, description, cost
+    const { 
+        make, model, licensePlate, customerName, customerPhone, // from admin form
+        vehicleId, date, type, description, cost // from user form (and some overlap with admin)
+    } = req.body;
+
+    const userId = req.user.id; // Get user ID from the authenticated token
 
     try {
-        // --- 1. Find or Create Vehicle ---
-        let vehicle = await Vehicle.findOne({ licensePlate });
+        let targetVehicle = null;
+        let serviceAssigneeUser = userId; // Default assignee is the current user (for user bookings)
 
-        if (!vehicle) {
-            console.warn(`Vehicle with license plate ${licensePlate} not found. Creating a new vehicle owned by admin ${adminId}.`);
-            vehicle = new Vehicle({
-                make,
-                model,
-                licensePlate,
-                owner: adminId // Assign admin as owner for newly created vehicles via this flow
-            });
-            await vehicle.save();
+        // --- Determine the Vehicle and the User for the Service Record ---
+        if (vehicleId) {
+            // This path is for user booking: vehicleId is provided, so find the existing vehicle
+            targetVehicle = await Vehicle.findOne({ _id: vehicleId, owner: userId });
+            if (!targetVehicle) {
+                return res.status(404).json({ msg: 'Selected vehicle not found or does not belong to you.' });
+            }
+            serviceAssigneeUser = targetVehicle.owner; // Use the actual owner of the vehicle
+            // When user books service, customerName and customerPhone are implicitly from the user's profile
+            // For now, we'll use the user's name and email. In a real app, you might fetch user details here.
+            // Or, keep `customerName` and `customerPhone` from `req.body` only if they come from the admin.
+            // For user booking, we'll grab these from the User model if available.
+            const userProfile = await User.findById(userId);
+            req.body.customerName = userProfile ? userProfile.name : 'Unknown User';
+            req.body.customerPhone = userProfile ? userProfile.email : 'No Phone Provided'; // Using email as placeholder for phone if not available
+        } else {
+            // This path is primarily for admin assigning a new service (possibly for a new/unknown vehicle)
+            // Or if licensePlate is provided directly (e.g., admin scanning a new vehicle)
+            if (!licensePlate || !make || !model || !customerName || !customerPhone) {
+                return res.status(400).json({ msg: 'Missing required vehicle/customer details for new service assignment (Admin).' });
+            }
+            
+            targetVehicle = await Vehicle.findOne({ licensePlate });
+
+            if (!targetVehicle) {
+                console.warn(`Vehicle with license plate ${licensePlate} not found. Creating a new vehicle owned by admin ${adminId}.`);
+                targetVehicle = new Vehicle({
+                    make,
+                    model,
+                    licensePlate,
+                    owner: userId // Assign admin as owner or the relevant user
+                });
+                await targetVehicle.save();
+            }
+            serviceAssigneeUser = targetVehicle.owner; // The actual owner of the vehicle
         }
 
-        // Determine the user associated with this service.
-        // Prefer the vehicle's owner if available. If the vehicle was found but its
-        // 'owner' field is missing or null (due to data inconsistencies from previous states),
-        // we will fall back to using the adminId for this service record.
-        // This ensures the `user` field in Service always receives a valid ObjectId.
-        const serviceUser = (vehicle.owner && vehicle.owner.toString()) ? vehicle.owner : adminId;
-
-        // --- 2. Create Service Entry ---
+        // --- Create Service Entry ---
         const newService = new Service({
-            vehicleId: vehicle._id, // Link to the found or newly created vehicle
-            user: serviceUser,       // Using the determined user ID for the service record
-            type, // This field acts as the status (e.g., "Pending", "In Progress")
-            description,
-            cost,
-            date: new Date(), // Service date is now
-            customerName,    // Save customerName to Service document
-            customerPhone    // Save customerPhone to Service document
+            vehicleId: targetVehicle._id, // Link to the determined vehicle
+            user: serviceAssigneeUser,    // Link to the vehicle's owner
+            date: date || new Date(),     // Use provided date or default to now
+            type: type || 'pending',      // Default to 'pending' if not explicitly set (e.g., from admin form)
+            description: description,
+            cost: cost !== undefined ? cost : 0, // Default cost to 0 for user bookings
+            customerName: req.body.customerName, // Use customerName from req.body (populated for user booking)
+            customerPhone: req.body.customerPhone // Use customerPhone from req.body (populated for user booking)
         });
 
         await newService.save();
@@ -50,7 +74,6 @@ exports.assignService = async (req, res) => {
 
     } catch (err) {
         console.error("Error assigning service:", err.message);
-        // More specific error handling for Mongoose validation errors
         if (err.name === 'ValidationError') {
             const messages = Object.values(err.errors).map(val => val.message);
             return res.status(400).json({ msg: `Validation failed: ${messages.join(', ')}` });
@@ -107,7 +130,7 @@ exports.fetchServices = async (req, res) => {
                 .populate('vehicleId') // Populate vehicle details
                 .populate('user'); // Populate user (owner) details
         } else {
-            // Regular user always sees all their services (for history)
+            // If regular user, fetch only their services
             services = await Service.find({ user: req.user.id })
                 .populate('vehicleId'); // Populate vehicle details for their services
         }
