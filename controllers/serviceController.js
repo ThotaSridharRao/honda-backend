@@ -87,21 +87,27 @@ exports.updateServiceStatus = async (req, res) => {
 
 
 // @route   GET api/services
-// @desc    Get all services for the logged-in user OR all services if admin
+// @desc    Get all services for the logged-in user OR all services if admin.
+//          Admin can optionally filter out 'picked-up' services via query param.
 // @access  Private
 exports.fetchServices = async (req, res) => {
     try {
         let services;
-        // Check if the requesting user is an admin
-        // req.user.isAdmin is populated by auth middleware (which ensures admin access)
+        // Get 'includePickedUp' query parameter. Default to false for admin, true for user.
+        // If includePickedUp=true, fetch all services, otherwise filter out 'picked-up'
+        const includePickedUp = req.query.includePickedUp === 'true';
+
         if (req.user.isAdmin) {
-            // If admin, fetch all services, and populate both vehicle and user details
-            // The 'user' field in Service refers to the owner of the vehicle, which is a User ID.
-            services = await Service.find()
+            let query = {};
+            // If includePickedUp is false, filter out 'picked-up' services for admin's current view
+            if (!includePickedUp) {
+                query.type = { $ne: 'picked-up' }; // $ne means "not equal to"
+            }
+            services = await Service.find(query)
                 .populate('vehicleId') // Populate vehicle details
                 .populate('user'); // Populate user (owner) details
         } else {
-            // If regular user, fetch only their services
+            // Regular user always sees all their services (for history)
             services = await Service.find({ user: req.user.id })
                 .populate('vehicleId'); // Populate vehicle details for their services
         }
