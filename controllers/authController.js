@@ -1,100 +1,110 @@
-const User = require('../models/user'); // Adjust path as needed
+const User = require('../models/user');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// @route   POST /api/auth/register
-// @desc    Register a new user
+// @route   POST api/auth/register
+// @desc    Register user
 // @access  Public
 exports.register = async (req, res) => {
-  const { name, email, password, isAdmin } = req.body;
+  const { name, email, password } = req.body;
 
   try {
-    // Check if user already exists
     let user = await User.findOne({ email });
     if (user) {
-      return res.status(400).json({ msg: 'User already exists with this email' });
+      return res.status(400).json({ msg: 'User already exists' });
     }
 
-    // Create a new user instance
     user = new User({
       name,
       email,
-      password,
-      isAdmin: isAdmin || false // Set isAdmin based on input or default to false
+      password
     });
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10); // Generate a salt for hashing
-    user.password = await bcrypt.hash(password, salt); // Hash the user's password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
 
-    // Save the user to the database
     await user.save();
 
-    // Create JWT payload
+    // Create JWT payload including user ID, name, and isAdmin status
     const payload = {
       user: {
-        id: user.id, // MongoDB's _id field
+        id: user.id,
+        name: user.name,    // <--- ADDED: Include the user's name
         isAdmin: user.isAdmin
       }
     };
 
-    // Sign the token
-    // Replace 'your_jwt_secret' with a strong, unique secret key.
-    // Set expiresIn to a reasonable duration (e.g., '1h' for 1 hour).
     jwt.sign(
       payload,
-      process.env.JWT_SECRET, // Use an environment variable for your secret
-      { expiresIn: '1h' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }, // Token expires in 1 hour
       (err, token) => {
         if (err) throw err;
-        res.json({ token, msg: 'User registered successfully!' }); // Send the token back to the client
+        res.json({ token, msg: 'User registered successfully!' });
       }
     );
+
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error during registration');
+    res.status(500).send('Server Error');
   }
 };
 
-// @route   POST /api/auth/login
-// @desc    Authenticate user & get token (login)
+// @route   POST api/auth/login
+// @desc    Authenticate user & get token
 // @access  Public
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Check if user exists
     let user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ msg: 'Invalid credentials' });
+      return res.status(400).json({ msg: 'Invalid Credentials' });
     }
 
-    // Compare provided password with hashed password in database
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ msg: 'Invalid credentials' });
+      return res.status(400).json({ msg: 'Invalid Credentials' });
     }
 
-    // Create JWT payload
+    // Create JWT payload including user ID, name, and isAdmin status
     const payload = {
       user: {
         id: user.id,
+        name: user.name,    // <--- ADDED: Include the user's name
         isAdmin: user.isAdmin
       }
     };
 
-    // Sign the token
     jwt.sign(
       payload,
-      process.env.JWT_SECRET, // Use an environment variable for your secret
-      { expiresIn: '1h' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }, // Token expires in 1 hour
       (err, token) => {
         if (err) throw err;
-        res.json({ token, msg: 'Logged in successfully!' }); // Send the token
+        res.json({ token, msg: 'Logged in successfully!' }); // Changed message to be consistent
       }
     );
+
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error during login');
+    res.status(500).send('Server Error');
   }
+};
+
+// @route   GET api/auth/user
+// @desc    Get user by token (for authenticated user profile)
+// @access  Private
+exports.getAuthUser = async (req, res) => {
+    try {
+        // req.user.id is populated by the auth middleware
+        const user = await User.findById(req.user.id).select('-password'); // Exclude password from response
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+        res.json(user);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
 };
