@@ -23,7 +23,7 @@ const serviceSchema = new mongoose.Schema({
     type: String,
     required: true,
     // Add more granular statuses as needed or use the initial ones from admin form
-    enum: ['pending', 'in-progress', 'completed', 'ready-for-pickup','picked up', 'cancelled', 'Oil Change', 'Tire Rotation', 'Brake Inspection', 'Engine Diagnostic', 'Fluid Check', 'Other'],
+    enum: ['pending', 'in-progress', 'completed', 'ready-for-pickup','picked-up', 'cancelled', 'Oil Change', 'Tire Rotation', 'Brake Inspection', 'Engine Diagnostic', 'Fluid Check', 'Other'],
     default: 'pending' // Default status for a new service
   },
   description: {
