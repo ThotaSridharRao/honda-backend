@@ -22,15 +22,15 @@ exports.assignService = async (req, res) => {
         // --- Determine the Vehicle and the User for the Service Record ---
         if (vehicleId) {
             // This path is for user booking: vehicleId is provided, so find the existing vehicle
-            targetVehicle = await Vehicle.findOne({ _id: vehicleId, owner: userId });
+            // Corrected: Using 'userId' to match the Vehicle schema's owner field
+            targetVehicle = await Vehicle.findOne({ _id: vehicleId, userId: userId });
             if (!targetVehicle) {
                 return res.status(404).json({ msg: 'Selected vehicle not found or does not belong to you.' });
             }
-            serviceAssigneeUser = targetVehicle.owner; // Use the actual owner of the vehicle
+            // Use the actual owner of the vehicle (which is already userId)
+            serviceAssigneeUser = targetVehicle.userId; 
+            
             // When user books service, customerName and customerPhone are implicitly from the user's profile
-            // For now, we'll use the user's name and email. In a real app, you might fetch user details here.
-            // Or, keep `customerName` and `customerPhone` from `req.body` only if they come from the admin.
-            // For user booking, we'll grab these from the User model if available.
             const userProfile = await User.findById(userId);
             req.body.customerName = userProfile ? userProfile.name : 'Unknown User';
             req.body.customerPhone = userProfile ? userProfile.email : 'No Phone Provided'; // Using email as placeholder for phone if not available
@@ -41,31 +41,35 @@ exports.assignService = async (req, res) => {
                 return res.status(400).json({ msg: 'Missing required vehicle/customer details for new service assignment (Admin).' });
             }
             
+            // For admin path, licensePlate is the primary identifier for existing vehicles.
             targetVehicle = await Vehicle.findOne({ licensePlate });
 
             if (!targetVehicle) {
-                console.warn(`Vehicle with license plate ${licensePlate} not found. Creating a new vehicle owned by admin ${adminId}.`);
+                // Corrected: Using 'userId' (from req.user.id, which would be the admin's ID)
+                // in the console warn and as the owner for a newly created vehicle via admin.
+                console.warn(`Vehicle with license plate ${licensePlate} not found. Creating a new vehicle owned by user ${userId}.`);
                 targetVehicle = new Vehicle({
                     make,
                     model,
                     licensePlate,
-                    owner: userId // Assign admin as owner or the relevant user
+                    userId: userId // Assign the current user (admin) as owner
                 });
                 await targetVehicle.save();
             }
-            serviceAssigneeUser = targetVehicle.owner; // The actual owner of the vehicle
+            // The actual owner of the vehicle (either existing or newly created)
+            serviceAssigneeUser = targetVehicle.userId; 
         }
 
         // --- Create Service Entry ---
         const newService = new Service({
             vehicleId: targetVehicle._id, // Link to the determined vehicle
-            user: serviceAssigneeUser,    // Link to the vehicle's owner
+            user: serviceAssigneeUser,    // Link to the vehicle's owner (should be userId from Vehicle model)
             date: date || new Date(),     // Use provided date or default to now
             type: type || 'pending',      // Default to 'pending' if not explicitly set (e.g., from admin form)
             description: description,
             cost: cost !== undefined ? cost : 0, // Default cost to 0 for user bookings
-            customerName: req.body.customerName, // Use customerName from req.body (populated for user booking)
-            customerPhone: req.body.customerPhone // Use customerPhone from req.body (populated for user booking)
+            customerName: req.body.customerName, // Use customerName from req.body (populated for user booking or from admin form)
+            customerPhone: req.body.customerPhone // Use customerPhone from req.body (populated for user booking or from admin form)
         });
 
         await newService.save();
