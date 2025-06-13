@@ -1,150 +1,102 @@
-const Service = require('../models/service');
-const Vehicle = require('../models/vehicle'); // Import Vehicle model
-const User = require('../models/user'); // Import User model for customer name/phone (if needed)
+const Service = require('../models/Service'); // Adjust path as needed
+const Vehicle = require('../models/Vehicle'); // Adjust path as needed
+const User = require('../models/User'); // Adjust path as needed
 
-// @route   POST api/services
-// @desc    Assign a new service to a vehicle (admin action) OR allow user to book a service
+// @route   POST /api/services
+// @desc    Assign (create) a new service record for a vehicle
 // @access  Private (requires authentication)
 exports.assignService = async (req, res) => {
-    // Fields potentially from admin form: make, model, licensePlate, customerName, customerPhone
-    // Fields potentially from user booking form: vehicleId, date, type, description, cost
-    const { 
-        make, model, licensePlate, customerName, customerPhone, // from admin form
-        vehicleId, date, type, description, cost // from user form (and some overlap with admin)
-    } = req.body;
+  const { vehicleId, date, type, description, cost } = req.body;
+  const userId = req.user.id; // Get user ID from the authenticated token
 
-    const userId = req.user.id; // Get user ID from the authenticated token
-
-    try {
-        let targetVehicle = null;
-        let serviceAssigneeUser = userId; // Default assignee is the current user (for user bookings)
-
-        // --- Determine the Vehicle and the User for the Service Record ---
-        if (vehicleId) {
-            // This path is for user booking: vehicleId is provided, so find the existing vehicle
-            // Corrected: Using 'userId' to match the Vehicle schema's owner field
-            targetVehicle = await Vehicle.findOne({ _id: vehicleId, userId: userId });
-            if (!targetVehicle) {
-                return res.status(404).json({ msg: 'Selected vehicle not found or does not belong to you.' });
-            }
-            // Use the actual owner of the vehicle (which is already userId)
-            serviceAssigneeUser = targetVehicle.userId; 
-            
-            // When user books service, customerName and customerPhone are implicitly from the user's profile
-            const userProfile = await User.findById(userId);
-            req.body.customerName = userProfile ? userProfile.name : 'Unknown User';
-            req.body.customerPhone = userProfile ? userProfile.email : 'No Phone Provided'; // Using email as placeholder for phone if not available
-        } else {
-            // This path is primarily for admin assigning a new service (possibly for a new/unknown vehicle)
-            // Or if licensePlate is provided directly (e.g., admin scanning a new vehicle)
-            if (!licensePlate || !make || !model || !customerName || !customerPhone) {
-                return res.status(400).json({ msg: 'Missing required vehicle/customer details for new service assignment (Admin).' });
-            }
-            
-            // For admin path, licensePlate is the primary identifier for existing vehicles.
-            targetVehicle = await Vehicle.findOne({ licensePlate });
-
-            if (!targetVehicle) {
-                // Corrected: Using 'userId' (from req.user.id, which would be the admin's ID)
-                // in the console warn and as the owner for a newly created vehicle via admin.
-                console.warn(`Vehicle with license plate ${licensePlate} not found. Creating a new vehicle owned by user ${userId}.`);
-                targetVehicle = new Vehicle({
-                    make,
-                    model,
-                    licensePlate,
-                    userId: userId // Assign the current user (admin) as owner
-                });
-                await targetVehicle.save();
-            }
-            // The actual owner of the vehicle (either existing or newly created)
-            serviceAssigneeUser = targetVehicle.userId; 
-        }
-
-        // --- Create Service Entry ---
-        const newService = new Service({
-            vehicleId: targetVehicle._id, // Link to the determined vehicle
-            user: serviceAssigneeUser,    // Link to the vehicle's owner (should be userId from Vehicle model)
-            date: date || new Date(),     // Use provided date or default to now
-            type: type || 'pending',      // Default to 'pending' if not explicitly set (e.g., from admin form)
-            description: description,
-            cost: cost !== undefined ? cost : 0, // Default cost to 0 for user bookings
-            customerName: req.body.customerName, // Use customerName from req.body (populated for user booking or from admin form)
-            customerPhone: req.body.customerPhone // Use customerPhone from req.body (populated for user booking or from admin form)
-        });
-
-        await newService.save();
-
-        res.status(201).json({ msg: 'Service entry added successfully!', service: newService });
-
-    } catch (err) {
-        console.error("Error assigning service:", err.message);
-        if (err.name === 'ValidationError') {
-            const messages = Object.values(err.errors).map(val => val.message);
-            return res.status(400).json({ msg: `Validation failed: ${messages.join(', ')}` });
-        }
-        res.status(500).send('Server Error while assigning service.');
+  try {
+    // Verify the vehicle exists and belongs to the authenticated user
+    const vehicle = await Vehicle.findOne({ _id: vehicleId, userId });
+    if (!vehicle) {
+      return res.status(404).json({ msg: 'Vehicle not found or does not belong to the user' });
     }
+
+    const newService = new Service({
+      userId,
+      vehicleId,
+      date: date || Date.now(), // Use provided date or default to now
+      type,
+      description,
+      cost
+    });
+
+    const service = await newService.save();
+    res.status(201).json({ msg: 'Service assigned successfully', service });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error during assigning service');
+  }
 };
 
-// @route   PATCH api/services/:id/status
-// @desc    Update service status (admin action)
-// @access  Private (Admin only)
-exports.updateServiceStatus = async (req, res) => {
-    const { id } = req.params; // Service ID
-    const { status } = req.body; // New status
-    // const adminId = req.user.id; // Admin performing the update (auth middleware ensures admin access)
+// @route   PUT /api/services/:id
+// @desc    Update an existing service record
+// @access  Private (requires authentication, only owner can update)
+exports.updateService = async (req, res) => {
+  const serviceId = req.params.id;
+  const userId = req.user.id; // Get user ID from the authenticated token
+  const { date, type, description, cost } = req.body; // Fields that can be updated
 
-    try {
-        let service = await Service.findById(id);
+  try {
+    let service = await Service.findById(serviceId);
 
-        if (!service) {
-            return res.status(404).json({ msg: 'Service not found' });
-        }
-
-        // Update the 'type' field which we are using for status
-        service.type = status; 
-        await service.save();
-
-        res.json({ msg: 'Service status updated successfully!', service });
-    } catch (err) {
-        console.error("Error updating service status:", err.message);
-        res.status(500).send('Server Error while updating service status.');
+    if (!service) {
+      return res.status(404).json({ msg: 'Service record not found' });
     }
+
+    // Ensure the service belongs to the authenticated user
+    if (service.userId.toString() !== userId) {
+      return res.status(401).json({ msg: 'User not authorized to update this service record' });
+    }
+
+    // Update fields if provided in the request body
+    if (date) service.date = date;
+    if (type) service.type = type;
+    if (description) service.description = description;
+    if (cost !== undefined) service.cost = cost;
+
+    await service.save(); // Save the updated service record
+    res.json({ msg: 'Service record updated successfully', service });
+  } catch (err) {
+    console.error(err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(400).json({ msg: 'Invalid service ID' });
+    }
+    res.status(500).send('Server error during updating service');
+  }
 };
 
-
-// @route   GET api/services
-// @desc    Get all services for the logged-in user OR all services if admin.
-//          Admin can optionally filter out 'picked-up' services via query param.
-// @access  Private
+// @route   GET /api/services
+// @desc    Fetch all services for the authenticated user, optionally by vehicle
+// @access  Private (requires authentication)
 exports.fetchServices = async (req, res) => {
-    try {
-        let services;
-        // Get 'includePickedUp' query parameter. Default to false for admin, true for user.
-        // If includePickedUp=true, fetch all services, otherwise filter out 'picked-up'
-        const includePickedUp = req.query.includePickedUp === 'true';
+  const userId = req.user.id; // Get user ID from the authenticated token
+  const { vehicleId } = req.query; // Allow filtering by vehicleId from query parameters
 
-        if (req.user.isAdmin) {
-            let query = {};
-            // If includePickedUp is false, filter out 'picked-up' services for admin's current view
-            if (!includePickedUp) {
-                query.type = { $ne: 'picked-up' }; // $ne means "not equal to"
-            }
-            services = await Service.find(query)
-                .populate('vehicleId') // Populate vehicle details
-                .populate('user'); // Populate user (owner) details
-        } else {
-            // If regular user, fetch only their services
-            services = await Service.find({ user: req.user.id })
-                .populate('vehicleId'); // Populate vehicle details for their services
-        }
+  try {
+    let query = { userId }; // Always filter by the authenticated user's ID
 
-        // Filter out services that might not have a populated vehicleId (e.g., if vehicle was deleted)
-        services = services.filter(service => service.vehicleId !== null);
-
-        res.json(services);
-    } catch (err) {
-        console.error("Error fetching services:", err.message);
-        res.status(500).send('Server Error while fetching services.');
+    if (vehicleId) {
+      // Optional: Verify the vehicle belongs to the user if filtering by vehicleId
+      const vehicle = await Vehicle.findOne({ _id: vehicleId, userId });
+      if (!vehicle) {
+        return res.status(404).json({ msg: 'Vehicle not found or does not belong to the user' });
+      }
+      query.vehicleId = vehicleId;
     }
+
+    // Find services based on the query and populate vehicle details
+    const services = await Service.find(query)
+      .populate('vehicleId', 'make model year licensePlate') // Populate selected fields from the Vehicle model
+      .sort({ date: -1 }); // Sort by date descending
+
+    res.json(services);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error during fetching services');
+  }
 };
