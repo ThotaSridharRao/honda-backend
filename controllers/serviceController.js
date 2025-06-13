@@ -1,6 +1,6 @@
-const Service = require('../models/Service'); // Adjust path as needed
-const Vehicle = require('../models/Vehicle'); // Adjust path as needed
-const User = require('../models/User'); // Adjust path as needed
+const Service = require('../models/service'); // Adjust path as needed
+const Vehicle = require('../models/vehicle'); // Adjust path as needed
+const User = require('../models/user'); // Adjust path as needed
 
 // @route   POST /api/services
 // @desc    Assign (create) a new service record for a vehicle
