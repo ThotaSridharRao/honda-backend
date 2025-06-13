@@ -11,6 +11,11 @@ router.use(authMiddleware);
 // @access  Private (Admin only)
 router.post('/', serviceController.assignService);
 
+// @route   PUT /api/services/:id
+// @desc    Update an existing service record (full details)
+// @access  Private (Admin only)
+router.put('/:id', serviceController.updateService); // Re-added: This route handles the full update from admin dashboard
+
 // @route   PATCH /api/services/:id/status
 // @desc    Update service status (admin action)
 // @access  Private (Admin only)
