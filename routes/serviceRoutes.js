@@ -8,13 +8,17 @@ router.use(authMiddleware);
 
 // @route   POST /api/services
 // @desc    Assign (create) a new service record
-// @access  Private (Admin only)
+// @access  Private
 router.post('/', serviceController.assignService);
+
+// @route   PUT /api/services/:id
+// @desc    Update an existing service record (full replacement)
+// @access  Private (Admin only)
+router.put('/:id', serviceController.updateService); // Re-added PUT route for comprehensive updates
 
 // @route   PATCH /api/services/:id/status
 // @desc    Update service status (admin action)
 // @access  Private (Admin only)
-// Corrected to use PATCH method and reference the correct controller function
 router.patch('/:id/status', serviceController.updateServiceStatus);
 
 // @route   GET /api/services
