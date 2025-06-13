@@ -8,21 +8,14 @@ router.use(authMiddleware);
 
 // @route   POST /api/services
 // @desc    Assign (create) a new service record
-// @access  Private
+// @access  Private (Admin only)
 router.post('/', serviceController.assignService);
-
-// @route   PUT /api/services/:id
-// @desc    Update an existing service record
-// @access  Private
-router.put('/:id', serviceController.updateService); // ADDED: Route for full service update
 
 // @route   PATCH /api/services/:id/status
 // @desc    Update service status (admin action)
 // @access  Private (Admin only)
 // Corrected to use PATCH method and reference the correct controller function
-// NOTE: This route should ideally call a specific updateServiceStatus function if its purpose is ONLY status.
-// If updateService handles all fields including status, then this route might be redundant or require adjustment.
-router.patch('/:id/status', serviceController.updateServiceStatus); 
+router.patch('/:id/status', serviceController.updateServiceStatus);
 
 // @route   GET /api/services
 // @desc    Fetch all services for the authenticated user (optional: filter by vehicleId)
