@@ -8,13 +8,14 @@ router.use(authMiddleware);
 
 // @route   POST /api/services
 // @desc    Assign (create) a new service record
-// @access  Private
+// @access  Private (Admin only)
 router.post('/', serviceController.assignService);
 
-// @route   PUT /api/services/:id
-// @desc    Update an existing service record
-// @access  Private
-router.put('/:id', serviceController.updateService); // This line is causing the error if serviceController.updateService is not a function
+// @route   PATCH /api/services/:id/status
+// @desc    Update service status (admin action)
+// @access  Private (Admin only)
+// Corrected to use PATCH method and reference the correct controller function
+router.patch('/:id/status', serviceController.updateServiceStatus);
 
 // @route   GET /api/services
 // @desc    Fetch all services for the authenticated user (optional: filter by vehicleId)
