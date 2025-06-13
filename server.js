@@ -16,7 +16,7 @@ const app = express();
 // --- CORS Configuration ---
 // Define your frontend's origin(s).
 const allowedOrigins = [
-  'https://maosaii-honda.onrender.com', // Corrected to match the origin from the error screenshot
+  'https://maosaji-honda.onrender.com', // Corrected to match the origin from the error screenshot
   // 'http://localhost:3000', // Example for local frontend development (adjust port if needed)
   // 'http://127.0.0.1:5500', // Example if you're using VS Code Live Server for frontend
   // Add any other domains your frontend might be hosted on
