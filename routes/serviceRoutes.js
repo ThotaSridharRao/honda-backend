@@ -14,13 +14,12 @@ router.post('/', serviceController.assignService);
 // @route   PUT /api/services/:id
 // @desc    Update an existing service record (full details)
 // @access  Private (Admin only)
-// Explicitly re-typing the path to ensure no hidden characters
-router.put('/:id', serviceController.updateService); 
+router.put('/:id', serviceController.updateService); // Re-added: This route handles the full update from admin dashboard
 
 // @route   PATCH /api/services/:id/status
 // @desc    Update service status (admin action)
 // @access  Private (Admin only)
-// Explicitly re-typing the path to ensure no hidden characters. This is likely the line 17 in your logs.
+// Corrected to use PATCH method and reference the correct controller function
 router.patch('/:id/status', serviceController.updateServiceStatus);
 
 // @route   GET /api/services

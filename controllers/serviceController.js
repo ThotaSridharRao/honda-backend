@@ -1,16 +1,16 @@
-const Service = require('../models/service'); // Adjust path as needed
-const Vehicle = require('../models/vehicle'); // Adjust path as needed
-const User = require('../models/user'); // Adjust path as needed
+const Service = require('../models/service');
+const Vehicle = require('../models/vehicle'); // Import Vehicle model
+const User = require('../models/user'); // Import User model for customer name/phone (if needed)
 
 // @route   POST api/services
 // @desc    Assign a new service to a vehicle (admin action) OR allow user to book a service
 // @access  Private (requires authentication)
 exports.assignService = async (req, res) => {
-    // Fields potentially from admin form: make, model, licensePlate, customerName, customerPhone, type, description, cost, partsUsed, totalBill
-    // Fields potentially from user booking form: vehicleId, date, type, description, cost (0 for user)
+    // Fields potentially from admin form: make, model, licensePlate, customerName, customerPhone, type, description, cost
+    // Fields potentially from user booking form: vehicleId, date, type, description (cost is 0 for user booking initially)
     const { 
         make, model, licensePlate, customerName, customerPhone, // from admin form when creating new vehicle
-        vehicleId, date, type, description, cost, partsUsed, totalBill // from user booking or admin assignment
+        vehicleId, date, type, description, cost // from user booking or admin assignment
     } = req.body;
 
     const userId = req.user.id; // Get user ID from the authenticated token (current logged-in user)
@@ -78,10 +78,7 @@ exports.assignService = async (req, res) => {
             description: description,
             cost: cost !== undefined ? cost : 0, // Default cost to 0 for user bookings or use provided for admin
             customerName: actualCustomerName, // Use determined customer name
-            customerPhone: actualCustomerPhone, // Use determined customer phone
-            // Include partsUsed and totalBill from request body (will be undefined for user bookings unless admin sets them)
-            partsUsed: partsUsed || [], 
-            totalBill: totalBill !== undefined ? totalBill : 0 
+            customerPhone: actualCustomerPhone // Use determined customer phone
         });
 
         await newService.save();
@@ -180,56 +177,29 @@ exports.updateServiceStatus = async (req, res) => {
     }
 };
 
-/**
- * @desc    Automatically cancels pending services that are older than 24 hours.
- * @access  Internal (called by a scheduled task)
- */
-exports.autoCancelPendingServices = async () => {
-    try {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours in milliseconds
-
-        const result = await Service.updateMany(
-            {
-                type: 'pending', // Only target pending services
-                date: { $lt: twentyFourHoursAgo } // Where the service date is older than 24 hours ago
-            },
-            {
-                $set: { type: 'cancelled', description: 'Automatically cancelled due to no action within 24 hours.' } // Update status and add a note
-            }
-        );
-        console.log(`Auto-cancellation: ${result.modifiedCount} pending services cancelled.`);
-    } catch (error) {
-        console.error("Error during auto-cancellation of pending services:", error.message);
-    }
-};
-
 
 // @route   GET api/services
 // @desc    Get all services for the logged-in user OR all services if admin.
-//          Admin can optionally filter out 'picked-up' AND 'cancelled' services via query param.
+//          Admin can optionally filter out 'picked-up' services via query param.
 // @access  Private
 exports.fetchServices = async (req, res) => {
     try {
         let services;
         // Get 'includePickedUp' query parameter. Default to false for admin, true for user.
         // If includePickedUp=true, fetch all services, otherwise filter out 'picked-up'
-        const includePickedUp = req.query.includePickedUp === 'true'; // Used for recent activity
-        const forAdminCurrentView = req.query.forAdminCurrentView === 'true'; // New param to specifically filter for admin's "current services"
+        const includePickedUp = req.query.includePickedUp === 'true';
 
         if (req.user.isAdmin) {
             let query = {};
-            // For admin's "Vehicles Currently in Service" view, filter out 'picked-up' and 'cancelled'
-            if (forAdminCurrentView) {
-                query.type = { $nin: ['picked-up', 'cancelled'] }; // $nin means "not in"
+            // If includePickedUp is false, filter out 'picked-up' services for admin's current view
+            if (!includePickedUp) {
+                query.type = { $ne: 'picked-up' }; // $ne means "not equal to"
             }
-            // If includePickedUp is true (for recent activity), no type filter is applied beyond specific routes
-            // If includePickedUp is false (default for admin), filter out 'picked-up' (this is effectively redundant if forAdminCurrentView is used)
-
             services = await Service.find(query)
                 .populate('vehicleId') // Populate vehicle details
                 .populate('user'); // Populate user (owner) details
         } else {
-            // Regular user always sees all their services (for history)
+            // If regular user, fetch only their services
             services = await Service.find({ user: req.user.id })
                 .populate('vehicleId'); // Populate vehicle details for their services
         }
