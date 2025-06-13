@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // Define the Service Schema
 const serviceSchema = new mongoose.Schema({
   // Reference to the User for whom this service was performed (vehicle owner)
-  user: { // Renamed from userId for clarity to match controller's 'user: vehicle.owner'
+  user: {
     type: mongoose.Schema.Types.ObjectId, // Specifies that this field will store MongoDB ObjectId
     ref: 'User', // References the 'User' model
     required: true // A service must be associated with a user
@@ -33,7 +33,7 @@ const serviceSchema = new mongoose.Schema({
   cost: {
     type: Number,
     required: false,
-    default: 0 // Cost of the service
+    default: 0 // Cost of the service. This will now be the 'estimated cost' or initial cost.
   },
   // New fields for customer name and phone, which come from the admin form
   customerName: {
@@ -44,6 +44,32 @@ const serviceSchema = new mongoose.Schema({
     type: String,
     required: true // Customer's phone at the time of service assignment
   },
+  // --- NEW FIELDS FOR FEATURE 6 ---
+  // To store a list of parts used and their costs
+  partsUsed: [
+    {
+      partName: {
+        type: String,
+        required: true
+      },
+      quantity: {
+        type: Number,
+        required: true,
+        default: 1
+      },
+      unitCost: {
+        type: Number,
+        required: true,
+        default: 0
+      }
+    }
+  ],
+  // To store the final total bill after all services and parts are accounted for
+  totalBill: {
+    type: Number,
+    required: false,
+    default: 0
+  }
 }, {
   timestamps: true // Adds createdAt and updatedAt timestamps automatically
 });
