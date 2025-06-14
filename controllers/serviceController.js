@@ -1,6 +1,6 @@
-const Service = require('../models/Service');
-const Vehicle = require('../models/Vehicle');
-const User = require('../models/User');
+const Service = require('../models/service');
+const Vehicle = require('../models/vehicle');
+const User = require('../models/user');
 const { io } = require('../server'); // Import the io instance from server.js
 
 // @route   POST api/services
