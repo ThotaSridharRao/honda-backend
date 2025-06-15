@@ -19,7 +19,7 @@ const allowedOrigins = [
 // Import your route modules
 const authRoutes = require('./routes/authRoutes');
 const vehicleRoutes = require('./routes/vehicleRoutes');
-const serviceRoutes = require('./routes/serviceRoutes'); // Will need to be updated to a function later
+const serviceRoutes = require('./routes/serviceRoutes'); // This will remain a direct router object for now
 
 
 const app = express();
@@ -28,11 +28,14 @@ const server = http.createServer(app); // Create HTTP server for Express and Soc
 // Initialize Socket.IO server
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins, // Now allowedOrigins is defined
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], // Be more inclusive for Socket.IO CORS
     credentials: true
   }
 });
+
+// IMPORTANT NEW LINE: Make 'io' instance accessible throughout the Express app via req.app.get('io')
+app.set('io', io); 
 
 io.on('connection', (socket) => {
   console.log('User connected to WebSocket:', socket.id);
@@ -54,6 +57,7 @@ const corsOptions = {
     }
   },
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Allow specific HTTP methods for Express
+  allowedHeaders: ['Content-Type', 'x-auth-token'], // Allow necessary headers
   credentials: true, // Allow cookies to be sent
   optionsSuccessStatus: 204 // Some legacy browsers (IE11, various SmartTVs) choke on 200
 };
@@ -78,14 +82,14 @@ mongoose.connect(process.env.MONGO_URI, {
 // Route mounting
 app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
-app.use('/api/services', serviceRoutes); // This will need to change to serviceRoutes(io) later
+app.use('/api/services', serviceRoutes); 
+
 
 app._router.stack.forEach((r) => {
   if (r.route && r.route.path) {
     console.log('Route registered:', r.route.path);
   }
 });
-
 
 
 // Basic test route
