@@ -80,6 +80,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/services', serviceRoutes); // This will need to change to serviceRoutes(io) later
 
+app._router.stack.forEach((r) => {
+  if (r.route && r.route.path) {
+    console.log('Route registered:', r.route.path);
+  }
+});
+
+
 
 // Basic test route
 app.get('/', (req, res) => {
