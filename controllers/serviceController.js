@@ -155,27 +155,34 @@ exports.updateService = async (req, res) => {
 // @desc    Update service status (admin action)
 // @access  Private (Admin only)
 exports.updateServiceStatus = async (req, res) => {
-    const { id } = req.params; // Service ID
-    const { status } = req.body; // New status
-    // const adminId = req.user.id; // Admin performing the update (auth middleware ensures admin access)
+  const { id } = req.params;
+  const { status } = req.body;
 
-    try {
-        let service = await Service.findById(id);
+  const io = req.app.get('io'); // ✅ Get socket.io instance
 
-        if (!service) {
-            return res.status(404).json({ msg: 'Service not found' });
-        }
+  try {
+    let service = await Service.findById(id);
 
-        // Update the 'type' field which we are using for status
-        service.type = status; 
-        await service.save();
-
-        res.json({ msg: 'Service status updated successfully!', service });
-    } catch (err) {
-        console.error("Error updating service status:", err.message);
-        res.status(500).send('Server Error while updating service status.');
+    if (!service) {
+      return res.status(404).json({ msg: 'Service not found' });
     }
+
+    service.type = status;
+    await service.save();
+
+    // ✅ Emit real-time update to all connected clients
+    io.emit('statusUpdated', {
+      serviceId: service._id,
+      status: service.type
+    });
+
+    res.json({ msg: 'Service status updated successfully!', service });
+  } catch (err) {
+    console.error("Error updating service status:", err.message);
+    res.status(500).send('Server Error while updating service status.');
+  }
 };
+
 
 
 // @route   GET api/services
